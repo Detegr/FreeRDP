@@ -695,6 +695,9 @@ void xf_toggle_fullscreen(xfContext* xfc)
 	rdpContext* context = (rdpContext*) xfc;
 	rdpSettings* settings = context->settings;
 
+	if (xfc->remote_app)
+		return;
+
 	xfc->fullscreen = (xfc->fullscreen) ? FALSE : TRUE;
 	xfc->decorations = (xfc->fullscreen) ? FALSE : settings->Decorations;
 
@@ -1942,6 +1945,10 @@ static BOOL xfreerdp_client_new(freerdp* instance, rdpContext* context)
 {
 	rdpSettings* settings;
 	xfContext* xfc = (xfContext*) instance->context;
+	Atom property;
+	unsigned long nitems, bytes;
+	BYTE* prop;
+	int i, state;
 
 	assert(context);
 	assert(xfc);
@@ -2003,8 +2010,10 @@ static BOOL xfreerdp_client_new(freerdp* instance, rdpContext* context)
 	xfc->_MOTIF_WM_HINTS = XInternAtom(xfc->display, "_MOTIF_WM_HINTS", False);
 	xfc->_NET_CURRENT_DESKTOP = XInternAtom(xfc->display, "_NET_CURRENT_DESKTOP", False);
 	xfc->_NET_WORKAREA = XInternAtom(xfc->display, "_NET_WORKAREA", False);
+	xfc->_NET_FRAME_EXTENTS = XInternAtom(xfc->display, "_NET_FRAME_EXTENTS", False);
 	xfc->_NET_WM_STATE = XInternAtom(xfc->display, "_NET_WM_STATE", False);
 	xfc->_NET_WM_STATE_FULLSCREEN = XInternAtom(xfc->display, "_NET_WM_STATE_FULLSCREEN", False);
+	xfc->_NET_WM_STATE_ABOVE = XInternAtom(xfc->display, "_NET_WM_STATE_ABOVE", False);
 	xfc->_NET_WM_STATE_MAXIMIZED_HORZ = XInternAtom(xfc->display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
 	xfc->_NET_WM_STATE_MAXIMIZED_VERT = XInternAtom(xfc->display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
 	xfc->_NET_WM_FULLSCREEN_MONITORS = XInternAtom(xfc->display, "_NET_WM_FULLSCREEN_MONITORS", False);
@@ -2026,6 +2035,52 @@ static BOOL xfreerdp_client_new(freerdp* instance, rdpContext* context)
 	xfc->WM_DELETE_WINDOW = XInternAtom(xfc->display, "WM_DELETE_WINDOW", False);
 	xfc->WM_STATE = XInternAtom(xfc->display, "WM_STATE", False);
 
+	property = XInternAtom(xfc->display, "_NET_SUPPORTED", False);
+
+	xf_GetWindowProperty(xfc, DefaultRootWindow(xfc->display), property, 0xFFFFFFFF, &nitems, &bytes, &prop);
+
+	state = 0;
+
+	for (i = 0; i < nitems; i++)
+	{
+		if (((Atom*) prop)[i] == xfc->_NET_WM_STATE_FULLSCREEN)
+			state |= 0x01;
+
+		if (((Atom*) prop)[i] == xfc->_NET_WM_FULLSCREEN_MONITORS)
+			state |= 0x02;
+
+		if (((Atom*) prop)[i] == xfc->_NET_WM_STATE_ABOVE)
+			state |= 0x04;
+
+		if (((Atom*) prop)[i] == xfc->_NET_WM_STATE_MAXIMIZED_VERT)
+			state |= 0x08;
+
+		if (((Atom*) prop)[i] == xfc->_NET_WM_STATE_MAXIMIZED_HORZ)
+			state |= 0x10;
+
+		if (((Atom*) prop)[i] == xfc->_NET_FRAME_EXTENTS)
+			state |= 0x20;
+	}
+
+	if (!(state & 0x01))
+		xfc->_NET_WM_STATE_FULLSCREEN = None;
+
+	if (!(state & 0x02))
+		xfc->_NET_WM_FULLSCREEN_MONITORS = None;
+
+	if (!(state & 0x04))
+		xfc->_NET_WM_STATE_ABOVE = None;
+
+	if ((state & 0x18) != 0x18)
+	{
+		xfc->_NET_WM_STATE_MAXIMIZED_VERT = None;
+		xfc->_NET_WM_STATE_MAXIMIZED_HORZ = None;
+	}
+
+	if (!(state & 0x20))
+		xfc->_NET_FRAME_EXTENTS = None;
+
+	xfc->UTF8_STRING = XInternAtom(xfc->display, "UTF8_STRING", FALSE);
 	xfc->xfds = ConnectionNumber(xfc->display);
 	xfc->screen_number = DefaultScreen(xfc->display);
 	xfc->screen = ScreenOfDisplay(xfc->display, xfc->screen_number);
